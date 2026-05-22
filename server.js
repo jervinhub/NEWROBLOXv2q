@@ -10,6 +10,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Helper: fetch with timeout
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 // Proxy: Search Roblox users by username
 app.get('/api/users/search', async (req, res) => {
   const { username } = req.query;
@@ -17,33 +31,33 @@ app.get('/api/users/search', async (req, res) => {
     return res.json({ data: [] });
   }
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://users.roblox.com/v1/users/search?keyword=${encodeURIComponent(username)}&limit=10`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; RobloxSite/1.0)',
-        }
-      }
+      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } },
+      6000
     );
     if (!response.ok) {
-      console.error('Roblox API error:', response.status, response.statusText);
-      return res.status(response.status).json({ data: [], error: `Roblox API returned ${response.status}` });
+      return res.status(response.status).json({ data: [], error: `Roblox API ${response.status}` });
     }
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error('Search fetch error:', err.message);
-    res.status(500).json({ data: [], error: 'Failed to fetch users', details: err.message });
+    const isTimeout = err.name === 'AbortError';
+    res.status(isTimeout ? 504 : 500).json({
+      data: [],
+      error: isTimeout ? 'Search timed out' : 'Failed to fetch users',
+      details: err.message
+    });
   }
 });
 
 // Proxy: Get user info by userId
 app.get('/api/users/:userId', async (req, res) => {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://users.roblox.com/v1/users/${req.params.userId}`,
-      { headers: { 'Accept': 'application/json' } }
+      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } },
+      5000
     );
     const data = await response.json();
     res.json(data);
@@ -52,35 +66,50 @@ app.get('/api/users/:userId', async (req, res) => {
   }
 });
 
-// Proxy: Get user avatar thumbnail
+// Proxy: Get MULTIPLE avatars in ONE request (batch) — much faster!
+app.get('/api/avatars/batch', async (req, res) => {
+  const { userIds } = req.query;
+  if (!userIds) return res.json({ data: [] });
+  try {
+    const response = await fetchWithTimeout(
+      `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userIds}&size=150x150&format=Png&isCircular=false`,
+      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } },
+      6000
+    );
+    if (!response.ok) return res.json({ data: [] });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ data: [], error: 'Failed to fetch avatars', details: err.message });
+  }
+});
+
+// Proxy: Get single avatar (kept for compatibility)
 app.get('/api/avatar/:userId', async (req, res) => {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${req.params.userId}&size=150x150&format=Png&isCircular=false`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; RobloxSite/1.0)',
-        }
-      }
+      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } },
+      5000
     );
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch avatar', details: err.message });
+    res.status(500).json({ data: [], error: 'Failed to fetch avatar', details: err.message });
   }
 });
 
 // Proxy: Get multiple users by IDs
 app.post('/api/users/batch', async (req, res) => {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://users.roblox.com/v1/users`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
         body: JSON.stringify({ userIds: req.body.userIds, excludeBannedUsers: false })
-      }
+      },
+      5000
     );
     const data = await response.json();
     res.json(data);
