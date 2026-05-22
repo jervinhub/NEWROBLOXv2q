@@ -57,11 +57,9 @@ function updateProfile() {
     bannerImg.src = state.bannerUrl;
     bannerImg.classList.remove('hidden');
     bannerDefault.classList.add('hidden');
-    bannerDefault.style.backgroundImage = `url('${state.bannerUrl}')`;
   } else {
     bannerImg.classList.add('hidden');
     bannerDefault.classList.remove('hidden');
-    bannerDefault.style.backgroundImage = '';
   }
 
   updateAllBalances();
