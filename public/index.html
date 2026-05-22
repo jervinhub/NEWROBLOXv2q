@@ -252,11 +252,13 @@
             <h1>Enjoy up to 25%<br/>more Robux</h1>
           </div>
           <div class="banner-actions">
-            <button class="banner-send-btn" onclick="openSendModal()">
+            <div class="banner-robux-display">
               <img src="assets/robux-icon.png" class="nav-robux-icon" alt="R$" onerror="this.style.display='none'" />
               <span id="navRobuxBalance">0</span>
-              <span class="send-divider">|</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13" class="send-btn-arrow">
+            </div>
+            <button class="banner-send-btn" onclick="openSendModal()">
+              <img src="assets/robloxsendbutton.png" class="send-btn-img" alt="" onerror="this.style.display='none'" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14" class="send-btn-arrow">
                 <line x1="12" y1="19" x2="12" y2="5"/>
                 <polyline points="5 12 12 5 19 12"/>
               </svg>
@@ -283,7 +285,7 @@
             </div>
           </div>
           <div class="bonus-right">
-            <img src="assets/banner.png" class="bonus-preview-img" alt="Game Preview" onerror="this.outerHTML='<div class=game-preview-bg>Sammy\'s Base</div>'" />
+            <div class="game-preview-bg">Sammy's Base</div>
           </div>
         </div>
       </div>
