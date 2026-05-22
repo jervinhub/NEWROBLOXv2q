@@ -262,13 +262,15 @@ function startSending() {
 
 function showSuccess() {
   showStep('sendStep4');
+  const sentAmount = sendState.amount;
+  const sentTo = sendState.recipientUsername;
   const text = document.getElementById('successText');
-  text.innerHTML = `You sent <strong>${fmt(sendState.amount)} Robux</strong> to @${sendState.recipientUsername}`;
+  text.innerHTML = `You sent <strong>${fmt(sentAmount)} Robux</strong> to @${escHtml(sentTo)}`;
 
-  // Show top notification
+  // Show top notification after modal closes — captures values NOW before reset
   setTimeout(() => {
     closeSendModal();
-    showNotification(`You sent ${fmt(sendState.amount)} Robux to @${sendState.recipientUsername}`);
+    showNotification(`You sent ${fmt(sentAmount)} Robux to @${sentTo}`);
   }, 2000);
 }
 
