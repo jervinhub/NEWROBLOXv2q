@@ -273,6 +273,8 @@ function showSuccess() {
 }
 
 // ── Roblox API: Search ─────────────────────────
+let currentSearchId = 0; // track stale searches
+
 function onSearchInput(val) {
   clearTimeout(searchDebounce);
   const hint = document.getElementById('searchHint');
@@ -290,64 +292,81 @@ function onSearchInput(val) {
   results.classList.remove('hidden');
   results.innerHTML = '<div class="search-loading">Searching...</div>';
 
-  searchDebounce = setTimeout(() => searchUsers(val), 400);
+  // Debounce reduced to 250ms for faster feel
+  searchDebounce = setTimeout(() => searchUsers(val), 250);
 }
 
 async function searchUsers(keyword) {
   const results = document.getElementById('searchResults');
+  const searchId = ++currentSearchId; // mark this search
+
   try {
     const res = await fetch(`/api/users/search?username=${encodeURIComponent(keyword)}`);
+    if (searchId !== currentSearchId) return; // stale, discard
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const users = data.data || [];
 
+    if (searchId !== currentSearchId) return;
+
     if (!users.length) {
-      results.innerHTML = '<div class="search-loading">No users found. Try a different username.</div>';
+      results.innerHTML = '<div class="search-loading">No users found.</div>';
       return;
     }
 
-    // Fetch avatars in parallel, with individual error handling
-    const avatarMap = {};
-    await Promise.allSettled(
-      users.map(async (u) => {
-        try {
-          const avatarRes = await fetch(`/api/avatar/${u.id}`);
-          if (!avatarRes.ok) throw new Error('avatar fetch failed');
-          const avatarData = await avatarRes.json();
-          avatarMap[u.id] = avatarData?.data?.[0]?.imageUrl || '';
-        } catch {
-          avatarMap[u.id] = '';
-        }
-      })
-    );
-
+    // ── STEP 1: Render users IMMEDIATELY with letter fallback avatars ──
     results.innerHTML = '';
-    users.forEach(user => {
-      const item = document.createElement('div');
-      item.className = 'search-result-item';
+    const avatarUrlMap = {}; // will be filled after
 
-      const avatarUrl = avatarMap[user.id] || '';
+    users.forEach(user => {
       const displayName = user.displayName || user.name;
       const initial = (displayName[0] || '?').toUpperCase();
 
+      const item = document.createElement('div');
+      item.className = 'search-result-item';
+      item.dataset.userId = user.id;
       item.innerHTML = `
-        ${avatarUrl
-          ? `<img class="result-avatar" src="${avatarUrl}" alt=""
-              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />`
-          : ''}
-        <div class="result-avatar-fallback" style="display:${avatarUrl ? 'none' : 'flex'};width:36px;height:36px;border-radius:50%;background:#2e2e2e;align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">${initial}</div>
+        <img class="result-avatar" id="avatar-${user.id}" src="" alt=""
+          style="display:none"
+          onerror="this.style.display='none';document.getElementById('fallback-${user.id}').style.display='flex';" />
+        <div class="result-avatar-fallback" id="fallback-${user.id}"
+          style="display:flex;width:36px;height:36px;border-radius:50%;background:#2e2e2e;
+                 align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">
+          ${initial}
+        </div>
         <div class="result-info">
           <div class="result-display-name">${escHtml(displayName)}</div>
           <div class="result-username">@${escHtml(user.name)}</div>
         </div>
       `;
-
-      item.onclick = () => selectUser(user.id, user.name, displayName, avatarUrl);
+      item.onclick = () => selectUser(user.id, user.name, displayName, avatarUrlMap[user.id] || '');
       results.appendChild(item);
     });
 
+    // ── STEP 2: Fetch ALL avatars in ONE batch request in background ──
+    const userIds = users.map(u => u.id).join(',');
+    fetch(`/api/avatars/batch?userIds=${userIds}`)
+      .then(r => r.ok ? r.json() : { data: [] })
+      .then(avatarData => {
+        if (searchId !== currentSearchId) return; // stale
+        (avatarData.data || []).forEach(entry => {
+          if (!entry.imageUrl) return;
+          avatarUrlMap[entry.targetId] = entry.imageUrl;
+          const img = document.getElementById(`avatar-${entry.targetId}`);
+          const fallback = document.getElementById(`fallback-${entry.targetId}`);
+          if (img) {
+            img.src = entry.imageUrl;
+            img.style.display = '';
+            if (fallback) fallback.style.display = 'none';
+          }
+        });
+      })
+      .catch(() => {}); // avatars failing is non-fatal, users already shown
+
   } catch (err) {
-    results.innerHTML = `<div class="search-loading">Search failed — check your connection and try again.</div>`;
+    if (searchId !== currentSearchId) return;
+    results.innerHTML = `<div class="search-loading">Search failed. Try again.</div>`;
     console.error('searchUsers error:', err);
   }
 }
