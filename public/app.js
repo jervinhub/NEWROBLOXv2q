@@ -297,32 +297,29 @@ async function searchUsers(keyword) {
   const results = document.getElementById('searchResults');
   try {
     const res = await fetch(`/api/users/search?username=${encodeURIComponent(keyword)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const users = data.data || [];
 
     if (!users.length) {
-      results.innerHTML = '<div class="search-loading">No users found</div>';
+      results.innerHTML = '<div class="search-loading">No users found. Try a different username.</div>';
       return;
     }
 
-// Fetch avatars properly
-let avatarMap = {};
-
-await Promise.all(
-  users.map(async (u) => {
-    try {
-      const avatarRes = await fetch(`/api/avatar/${u.id}`);
-      const avatarData = await avatarRes.json();
-
-      avatarMap[u.id] =
-        avatarData?.data?.[0]?.imageUrl ||
-        "https://tr.rbxcdn.com/30DAY-AvatarHeadshot-3101C026E2F9A2BFAE8F0A3A8F4B6A2D-Png/150/150/AvatarHeadshot/Webp/noFilter";
-    } catch {
-      avatarMap[u.id] =
-        "https://tr.rbxcdn.com/30DAY-AvatarHeadshot-3101C026E2F9A2BFAE8F0A3A8F4B6A2D-Png/150/150/AvatarHeadshot/Webp/noFilter";
-    }
-  })
-);
+    // Fetch avatars in parallel, with individual error handling
+    const avatarMap = {};
+    await Promise.allSettled(
+      users.map(async (u) => {
+        try {
+          const avatarRes = await fetch(`/api/avatar/${u.id}`);
+          if (!avatarRes.ok) throw new Error('avatar fetch failed');
+          const avatarData = await avatarRes.json();
+          avatarMap[u.id] = avatarData?.data?.[0]?.imageUrl || '';
+        } catch {
+          avatarMap[u.id] = '';
+        }
+      })
+    );
 
     results.innerHTML = '';
     users.forEach(user => {
@@ -331,11 +328,14 @@ await Promise.all(
 
       const avatarUrl = avatarMap[user.id] || '';
       const displayName = user.displayName || user.name;
+      const initial = (displayName[0] || '?').toUpperCase();
 
       item.innerHTML = `
-        <img class="result-avatar" src="${avatarUrl}" alt=""
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-        <div class="result-avatar-fallback" style="display:none;width:36px;height:36px;border-radius:50%;background:#2e2e2e;align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">${displayName[0].toUpperCase()}</div>
+        ${avatarUrl
+          ? `<img class="result-avatar" src="${avatarUrl}" alt=""
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />`
+          : ''}
+        <div class="result-avatar-fallback" style="display:${avatarUrl ? 'none' : 'flex'};width:36px;height:36px;border-radius:50%;background:#2e2e2e;align-items:center;justify-content:center;font-size:14px;color:#888;flex-shrink:0;">${initial}</div>
         <div class="result-info">
           <div class="result-display-name">${escHtml(displayName)}</div>
           <div class="result-username">@${escHtml(user.name)}</div>
@@ -347,8 +347,8 @@ await Promise.all(
     });
 
   } catch (err) {
-    results.innerHTML = '<div class="search-loading">Error searching. Try again.</div>';
-    console.error(err);
+    results.innerHTML = `<div class="search-loading">Search failed — check your connection and try again.</div>`;
+    console.error('searchUsers error:', err);
   }
 }
 
