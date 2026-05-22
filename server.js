@@ -14,17 +14,27 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/users/search', async (req, res) => {
   const { username } = req.query;
   if (!username || username.length < 3) {
-    return res.json({ users: [] });
+    return res.json({ data: [] });
   }
   try {
     const response = await fetch(
       `https://users.roblox.com/v1/users/search?keyword=${encodeURIComponent(username)}&limit=10`,
-      { headers: { 'Accept': 'application/json' } }
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; RobloxSite/1.0)',
+        }
+      }
     );
+    if (!response.ok) {
+      console.error('Roblox API error:', response.status, response.statusText);
+      return res.status(response.status).json({ data: [], error: `Roblox API returned ${response.status}` });
+    }
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch users', details: err.message });
+    console.error('Search fetch error:', err.message);
+    res.status(500).json({ data: [], error: 'Failed to fetch users', details: err.message });
   }
 });
 
@@ -47,7 +57,12 @@ app.get('/api/avatar/:userId', async (req, res) => {
   try {
     const response = await fetch(
       `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${req.params.userId}&size=150x150&format=Png&isCircular=false`,
-      { headers: { 'Accept': 'application/json' } }
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; RobloxSite/1.0)',
+        }
+      }
     );
     const data = await response.json();
     res.json(data);
