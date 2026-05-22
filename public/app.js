@@ -262,15 +262,30 @@ function startSending() {
 
 function showSuccess() {
   showStep('sendStep4');
+
+  // success modal text
   const text = document.getElementById('successText');
   text.innerHTML = `You sent <strong>${fmt(sendState.amount)} Robux</strong> to @${sendState.recipientUsername}`;
 
-  // Show top notification
+  // TOP NOTIFICATION
+  document.getElementById('notifAmount').textContent = fmt(sendState.amount);
+  document.getElementById('notifRecipient').textContent = '@' + sendState.recipientUsername;
+
   setTimeout(() => {
     closeSendModal();
-    showNotification(`You sent ${fmt(sendState.amount)} Robux to @${sendState.recipientUsername}`);
-  }, 2000);
+
+    const notif = document.getElementById('topNotification');
+    notif.classList.remove('hidden');
+
+    if (notifTimeout) clearTimeout(notifTimeout);
+
+    notifTimeout = setTimeout(() => {
+      closeNotification();
+    }, 6000);
+
+  }, 1500);
 }
+
 
 // ── Roblox API: Search ─────────────────────────
 let currentSearchId = 0; // track stale searches
